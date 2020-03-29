@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,16 +51,19 @@ type GCSEvent struct {
 	// ResourceState string `json:"resourceState"`
 }
 
-// RecordFailingJob creates a date sharded index of all failed jobs within
-// a bucket. Jobs that fail are linked from
+// IndexJobs creates a date sharded index of all jobs within
+// a bucket. Jobs that have completed are linked from
 //
 //   gs://BUCKET/index/job-failures/RFC3339_DATE_OF_FAILURE/JOB_NAME/BUILD_NUMBER
 //
-// with the contents of that file being the finished.json (for now) and a 'link'
-// metadata attribute pointing to a gs:// path to the source. Readers should not
-// assume anything about the contents of the object or that the link is in the
-// same bucket.
-func RecordFailingJob(ctx context.Context, e GCSEvent) error {
+// with the contents of that file a job result object and a 'link'
+// metadata attribute pointing to a gs:// path to the source. The
+// 'state' metadata attribute is set to 'success', 'failure', or
+// 'error' if the passed attribute is not set in the finished.json.
+//
+// Readers should not assume anything about the contents of the
+// object or that the link is in the same bucket.
+func IndexJobs(ctx context.Context, e GCSEvent) error {
 	// meta, err := metadata.FromContext(ctx)
 	// if err != nil {
 	// 	return fmt.Errorf("metadata.FromContext: %v", err)
@@ -84,8 +88,18 @@ func RecordFailingJob(ctx context.Context, e GCSEvent) error {
 		if err := json.Unmarshal(data, &finished); err != nil {
 			return err
 		}
-		if finished.Passed == nil || *finished.Passed || finished.Timestamp == nil || *finished.Timestamp == 0 {
+		if finished.Timestamp == nil || *finished.Timestamp == 0 {
 			return nil
+		}
+
+		var state string
+		switch {
+		case finished.Passed == nil:
+			state = "error"
+		case *finished.Passed:
+			state = "success"
+		default:
+			state = "failed"
 		}
 
 		// build index components
@@ -98,18 +112,42 @@ func RecordFailingJob(ctx context.Context, e GCSEvent) error {
 			Host:   e.Bucket,
 			Path:   path.Dir(e.Name),
 		}).String()
-		indexPath := path.Join("index", "job-failures", key, job, build)
+		indexPath := path.Join("index", "job-state", key, job, build)
 
-		// write the link
-		w := client.Bucket(e.Bucket).Object(indexPath).NewWriter(ctx)
-		w.ObjectAttrs.Metadata = map[string]string{"link": u}
+		// set the data for the job to the result
+		if data, err = json.Marshal(JobResult{
+			State:       state,
+			CompletedAt: finishedAt.Unix(),
+			Link:        u,
+		}); err != nil {
+			return fmt.Errorf("could not serialize job result: %v", err)
+		}
+
+		// write the link with the metadata contents
+		w := client.
+			Bucket(e.Bucket).
+			Object(indexPath).
+			If(storage.Conditions{DoesNotExist: true}).
+			NewWriter(ctx)
+		w.ObjectAttrs.Metadata = map[string]string{
+			"link":      u,
+			"state":     state,
+			"completed": strconv.FormatInt(finishedAt.Unix(), 10),
+		}
 		if _, err := w.Write(data); err != nil {
+			defer w.Close()
 			return fmt.Errorf("failed to link %s to %s", indexPath, u)
 		}
 		if err := w.Close(); err != nil {
 			return fmt.Errorf("failed to link %s to %s", indexPath, u)
 		}
-		log.Printf("Indexed failed job %s to gs://%s/%s", u, e.Bucket, indexPath)
+		log.Printf("Indexed job %s with state %s to gs://%s/%s", u, state, e.Bucket, indexPath)
 	}
 	return nil
+}
+
+type JobResult struct {
+	State       string `json:"state"`
+	CompletedAt int64  `json:"completed_at"`
+	Link        string `json:"link"`
 }
