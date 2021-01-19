@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/option"
 )
 
 // GCSEvent is the payload of a GCS event.
@@ -75,7 +76,7 @@ func IndexJobs(ctx context.Context, e GCSEvent) error {
 		if len(parts) < 4 {
 			return nil
 		}
-		client, err := storage.NewClient(ctx)
+		client, err := storage.NewClient(ctx, option.WithScopes(storage.ScopeReadWrite))
 		if err != nil {
 			return err
 		}
@@ -136,10 +137,10 @@ func IndexJobs(ctx context.Context, e GCSEvent) error {
 		}
 		if _, err := w.Write(data); err != nil {
 			defer w.Close()
-			return fmt.Errorf("failed to link %s to %s", indexPath, u)
+			return fmt.Errorf("failed to link %s to %s: %v", indexPath, u, err)
 		}
 		if err := w.Close(); err != nil {
-			return fmt.Errorf("failed to link %s to %s", indexPath, u)
+			return fmt.Errorf("failed to link %s to %s: %v", indexPath, u, err)
 		}
 		log.Printf("Indexed job %s with state %s to gs://%s/%s", u, state, e.Bucket, indexPath)
 	}
