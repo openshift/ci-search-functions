@@ -267,7 +267,8 @@ func IndexJobs(ctx context.Context, e GCSEvent) error {
 			If(storage.Conditions{DoesNotExist: true}).
 			NewWriter(ctx)
 		w.ObjectAttrs.Metadata = map[string]string{
-			"link": u,
+			"link":      u,
+			"completed": strconv.FormatInt(finishedAt.Unix(), 10),
 		}
 		if _, err := w.Write(data); err != nil {
 			defer w.Close()
