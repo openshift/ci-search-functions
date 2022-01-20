@@ -238,8 +238,8 @@ func IndexJobs(ctx context.Context, e GCSEvent) error {
 					continue
 				}
 				outputMetrics[fmt.Sprintf("%s{%s=%q}", name, label, value)] = OutputMetric{
-					Value:     v.Data.Result[0].Value.Value,
-					Timestamp: v.Data.Result[0].Value.Timestamp,
+					Value:     result.Value.Value,
+					Timestamp: result.Value.Timestamp,
 				}
 				//log.Printf("%s{%s=%q} %s @ %d", name, label, value, result.Value.Value, result.Value.Timestamp)
 			}
