@@ -217,27 +217,36 @@ func IndexJobs(ctx context.Context, e GCSEvent) error {
 				//log.Printf("%s %s @ %d", name, v.Data.Result[0].Value.Value, v.Data.Result[0].Value.Timestamp)
 				continue
 			}
-			var label string
+			var labels []string
 			for i, result := range v.Data.Result {
-				if len(label) == 0 {
+				if len(labels) == 0 {
+					labels = make([]string, len(result.Metric))
+					j := 0
 					for k := range result.Metric {
-						label = k
-						break
+						labels[j] = k
+						j++
 					}
-					if len(label) == 0 {
+					if len(labels) == 0 {
 						continue
 					}
 				}
-				value, ok := result.Metric[label]
-				if !ok {
-					log.Printf("warn: Dropped result %d from %s because no value for metric %s", i, name, label)
-					continue
+				var metricSelector string
+				for _, label := range labels {
+					value, ok := result.Metric[label]
+					if !ok {
+						log.Printf("warn: Dropped result %d from %s because no value for metric %s", i, name, label)
+						continue
+					}
+					if metricSelector != "" {
+						metricSelector += ","
+					}
+					metricSelector += fmt.Sprintf("%s=%q", label, value)
 				}
-				outputMetrics[fmt.Sprintf("%s{%s=%q}", name, label, value)] = OutputMetric{
+				outputMetrics[fmt.Sprintf("%s{%s}", name, metricSelector)] = OutputMetric{
 					Value:     result.Value.Value,
 					Timestamp: result.Value.Timestamp,
 				}
-				//log.Printf("%s{%s=%q} %s @ %d", name, label, value, result.Value.Value, result.Value.Timestamp)
+				//log.Printf("%s{%s} %s @ %d", name, metricSelector, result.Value.Value, result.Value.Timestamp)
 			}
 		}
 
