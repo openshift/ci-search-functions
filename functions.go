@@ -219,10 +219,6 @@ func IndexJobs(ctx context.Context, e GCSEvent) error {
 			}
 			var label string
 			for i, result := range v.Data.Result {
-				if len(result.Metric) != 1 {
-					log.Printf("warn: Dropped result %d from %s because metric labels were must have length 1 instead of %d", i, name, len(result.Metric))
-					continue
-				}
 				if len(label) == 0 {
 					for k := range result.Metric {
 						label = k
