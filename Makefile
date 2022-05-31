@@ -8,7 +8,7 @@ deploy: build
 		--service-account search-index-gcs-writer@openshift-gce-devel.iam.gserviceaccount.com \
 		--memory 128MB --timeout=15s --max-instances=10 \
 		--trigger-resource origin-ci-test --trigger-event google.storage.object.finalize
-.PHONY: deploy-functions
+.PHONY: deploy
 
 deploy-service-account:
 	gcloud iam service-accounts create search-index-gcs-writer \
@@ -24,4 +24,4 @@ deploy-service-account:
 delete:
 	gcloud functions delete IndexJobs \
 		--project openshift-gce-devel
-.PHONY: delete-functions
+.PHONY: delete
